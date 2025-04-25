@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext } from 'react';
 
 interface EconomicMetric {
@@ -133,7 +132,7 @@ export const PakistanEconomyProvider: React.FC<{ children: React.ReactNode }> = 
     // Pakistan-specific savings options
     recommendations.push({
       title: 'National Savings Schemes',
-      description: 'Consider Pakistan's National Savings Schemes which offer competitive returns that may beat inflation.',
+      description: 'Consider Pakistan\'s National Savings Schemes which offer competitive returns that may beat inflation.',
       priority: 'medium'
     });
     
