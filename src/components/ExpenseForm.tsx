@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -23,6 +23,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+import VoiceRecognition, { ExpenseCommand } from './VoiceRecognition';
+import { toast } from '@/components/ui/sonner';
 
 const formSchema = z.object({
   amount: z.coerce.number().positive('Amount must be positive'),
@@ -49,6 +52,8 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
   },
   buttonText = 'Add Expense'
 }) => {
+  const [voiceTranscript, setVoiceTranscript] = useState<string>('');
+
   const form = useForm<ExpenseFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues,
@@ -70,9 +75,47 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
     'Miscellaneous',
   ];
 
+  const handleVoiceCommand = (command: ExpenseCommand) => {
+    if (command.amount) {
+      form.setValue('amount', command.amount);
+    }
+    
+    if (command.category) {
+      form.setValue('category', command.category);
+    }
+    
+    if (command.description) {
+      form.setValue('description', command.description);
+    }
+    
+    if (command.date) {
+      form.setValue('date', command.date);
+    }
+    
+    toast.success('Voice command recognized!');
+  };
+
+  const handleVoiceResult = (text: string) => {
+    setVoiceTranscript(text);
+  };
+
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        {voiceTranscript && (
+          <div className="p-3 bg-muted rounded-md mb-4 text-sm">
+            <p className="font-medium">Voice transcript:</p>
+            <p className="italic">{voiceTranscript}</p>
+          </div>
+        )}
+
+        <div className="flex justify-end">
+          <VoiceRecognition 
+            onResult={handleVoiceResult} 
+            onCommandDetected={handleVoiceCommand}
+          />
+        </div>
+
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <FormField
             control={form.control}
@@ -122,7 +165,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({
               <FormItem>
                 <FormLabel>Description</FormLabel>
                 <FormControl>
-                  <Input {...field} />
+                  <Textarea {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
