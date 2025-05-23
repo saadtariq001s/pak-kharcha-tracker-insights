@@ -1,6 +1,8 @@
-
+// src/context/ExpenseContext.tsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { toast } from '@/components/ui/sonner';
+import { useAuth } from '@/context/AuthContext';
+import { CSVDataManager } from '@/lib/csv-data-manager';
 
 // Define expense category types specific to Pakistan
 export type ExpenseCategory = 
@@ -28,67 +30,126 @@ export interface Expense {
 
 interface ExpenseContextType {
   expenses: Expense[];
-  addExpense: (expense: Omit<Expense, 'id'>) => void;
-  deleteExpense: (id: string) => void;
-  updateExpense: (expense: Expense) => void;
+  addExpense: (expense: Omit<Expense, 'id'>) => Promise<void>;
+  deleteExpense: (id: string) => Promise<void>;
+  updateExpense: (expense: Expense) => Promise<void>;
   loading: boolean;
   getMonthlyExpenses: (month: number, year: number) => Expense[];
   getTotalByCategory: (month: number, year: number) => Record<ExpenseCategory, number>;
   getMonthlyTotal: (month: number, year: number) => number;
   getAverageMonthlyExpenditure: () => number;
+  exportUserData: () => Promise<void>;
+  importUserData: (file: File) => Promise<void>;
+  clearAllData: () => Promise<void>;
+  refreshData: () => Promise<void>;
 }
 
 const ExpenseContext = createContext<ExpenseContextType | undefined>(undefined);
 
-const STORAGE_KEY = 'pakistan-expense-tracker';
-
 export const ExpenseProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
+  const { user, isAuthenticated } = useAuth();
 
-  // Load expenses from localStorage on initial render
+  // Load expenses when user changes or component mounts
   useEffect(() => {
-    const storedExpenses = localStorage.getItem(STORAGE_KEY);
-    if (storedExpenses) {
-      try {
-        setExpenses(JSON.parse(storedExpenses));
-      } catch (error) {
-        console.error('Failed to parse stored expenses', error);
-        toast.error('Failed to load your expense data');
+    if (isAuthenticated && user) {
+      loadUserExpenses();
+    } else {
+      setExpenses([]);
+      setLoading(false);
+    }
+  }, [user, isAuthenticated]);
+
+  const loadUserExpenses = async () => {
+    if (!user) return;
+    
+    setLoading(true);
+    try {
+      const userExpenses = await CSVDataManager.loadExpenses(user.username);
+      setExpenses(userExpenses);
+    } catch (error) {
+      console.error('Failed to load user expenses:', error);
+      toast.error('Failed to load your expense data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveUserExpenses = async (newExpenses: Expense[]) => {
+    if (!user) return;
+    
+    try {
+      const success = await CSVDataManager.saveExpenses(user.username, newExpenses);
+      if (!success) {
+        toast.error('Failed to save expense data');
       }
+    } catch (error) {
+      console.error('Failed to save user expenses:', error);
+      toast.error('Failed to save expense data');
     }
-    setLoading(false);
-  }, []);
-
-  // Save expenses to localStorage whenever they change
-  useEffect(() => {
-    if (!loading) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(expenses));
-    }
-  }, [expenses, loading]);
-
-  const addExpense = (expense: Omit<Expense, 'id'>) => {
-    const newExpense = {
-      ...expense,
-      id: crypto.randomUUID(),
-    };
-
-    setExpenses((prev) => [...prev, newExpense]);
-    toast.success('Expense added successfully');
   };
 
-  const deleteExpense = (id: string) => {
-    setExpenses((prev) => prev.filter((expense) => expense.id !== id));
-    toast.success('Expense deleted');
+  const addExpense = async (expense: Omit<Expense, 'id'>) => {
+    if (!user) {
+      toast.error('You must be logged in to add expenses');
+      return;
+    }
+
+    try {
+      const newExpense = {
+        ...expense,
+        id: crypto.randomUUID(),
+      };
+
+      const newExpenses = [...expenses, newExpense];
+      setExpenses(newExpenses);
+      await saveUserExpenses(newExpenses);
+      toast.success('Expense added successfully');
+    } catch (error) {
+      console.error('Failed to add expense:', error);
+      toast.error('Failed to add expense');
+    }
   };
 
-  const updateExpense = (updatedExpense: Expense) => {
-    setExpenses((prev) => 
-      prev.map((expense) => 
+  const deleteExpense = async (id: string) => {
+    if (!user) {
+      toast.error('You must be logged in to delete expenses');
+      return;
+    }
+
+    try {
+      const newExpenses = expenses.filter((expense) => expense.id !== id);
+      setExpenses(newExpenses);
+      await saveUserExpenses(newExpenses);
+      toast.success('Expense deleted successfully');
+    } catch (error) {
+      console.error('Failed to delete expense:', error);
+      toast.error('Failed to delete expense');
+      // Revert on error
+      await loadUserExpenses();
+    }
+  };
+
+  const updateExpense = async (updatedExpense: Expense) => {
+    if (!user) {
+      toast.error('You must be logged in to update expenses');
+      return;
+    }
+
+    try {
+      const newExpenses = expenses.map((expense) => 
         expense.id === updatedExpense.id ? updatedExpense : expense
-      )
-    );
-    toast.success('Expense updated');
+      );
+      setExpenses(newExpenses);
+      await saveUserExpenses(newExpenses);
+      toast.success('Expense updated successfully');
+    } catch (error) {
+      console.error('Failed to update expense:', error);
+      toast.error('Failed to update expense');
+      // Revert on error
+      await loadUserExpenses();
+    }
   };
 
   // Get expenses for a specific month and year
@@ -151,6 +212,65 @@ export const ExpenseProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return monthsDiff > 0 ? totalAmount / monthsDiff : totalAmount;
   };
 
+  const exportUserData = async () => {
+    if (!user) {
+      toast.error('You must be logged in to export data');
+      return;
+    }
+
+    try {
+      const fileName = await CSVDataManager.exportUserData(user.username);
+      if (fileName) {
+        toast.success(`Data exported successfully as ${fileName}`);
+      } else {
+        toast.error('No data to export');
+      }
+    } catch (error) {
+      console.error('Failed to export user data:', error);
+      toast.error('Failed to export data');
+    }
+  };
+
+  const importUserData = async (file: File) => {
+    if (!user) {
+      toast.error('You must be logged in to import data');
+      return;
+    }
+
+    try {
+      await CSVDataManager.importUserData(user.username, file);
+      await loadUserExpenses(); // Reload data after import
+      toast.success('Data imported successfully');
+    } catch (error) {
+      console.error('Failed to import user data:', error);
+      toast.error(`Failed to import data: ${error.message || 'Unknown error'}`);
+    }
+  };
+
+  const clearAllData = async () => {
+    if (!user) {
+      toast.error('You must be logged in to clear data');
+      return;
+    }
+
+    try {
+      const success = await CSVDataManager.deleteUserData(user.username);
+      if (success) {
+        setExpenses([]);
+        toast.success('All data cleared successfully');
+      } else {
+        toast.error('Failed to clear data');
+      }
+    } catch (error) {
+      console.error('Failed to clear user data:', error);
+      toast.error('Failed to clear data');
+    }
+  };
+
+  const refreshData = async () => {
+    await loadUserExpenses();
+  };
+
   return (
     <ExpenseContext.Provider 
       value={{
@@ -163,6 +283,10 @@ export const ExpenseProvider: React.FC<{ children: React.ReactNode }> = ({ child
         getTotalByCategory,
         getMonthlyTotal,
         getAverageMonthlyExpenditure,
+        exportUserData,
+        importUserData,
+        clearAllData,
+        refreshData,
       }}
     >
       {children}
