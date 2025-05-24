@@ -5,9 +5,10 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/context/AuthContext";
+import { BusinessEconomyProvider } from "@/context/BusinessEconomyContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import Dashboard from "./pages/Dashboard";
-import Expenses from "./pages/Expenses";
+import Transactions from "./pages/Transactions";
 import Analytics from "./pages/Analytics";
 import Insights from "./pages/Insights";
 import Settings from "./pages/Settings";
@@ -31,25 +32,27 @@ const App = () => (
         <Toaster />
         <Sonner />
         <AuthProvider>
-          <BrowserRouter>
-            <Routes>
-              <Route 
-                path="/" 
-                element={
-                  <ProtectedRoute>
-                    <Layout />
-                  </ProtectedRoute>
-                }
-              >
-                <Route index element={<Dashboard />} />
-                <Route path="expenses" element={<Expenses />} />
-                <Route path="analytics" element={<Analytics />} />
-                <Route path="insights" element={<Insights />} />
-                <Route path="settings" element={<Settings />} />
-              </Route>
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </BrowserRouter>
+          <BusinessEconomyProvider>
+            <BrowserRouter>
+              <Routes>
+                <Route 
+                  path="/" 
+                  element={
+                    <ProtectedRoute>
+                      <Layout />
+                    </ProtectedRoute>
+                  }
+                >
+                  <Route index element={<Dashboard />} />
+                  <Route path="transactions" element={<Transactions />} />
+                  <Route path="analytics" element={<Analytics />} />
+                  <Route path="insights" element={<Insights />} />
+                  <Route path="settings" element={<Settings />} />
+                </Route>
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </BrowserRouter>
+          </BusinessEconomyProvider>
         </AuthProvider>
       </TooltipProvider>
     </QueryClientProvider>

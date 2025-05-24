@@ -1,23 +1,15 @@
 // src/pages/Dashboard.tsx
 import React, { useState, useMemo } from 'react';
-import { useExpenses } from '@/context/ExpenseContext';
+import { useFinancials } from '@/context/FinancialContext';
 import { useAuth } from '@/context/AuthContext';
-import { usePakistanEconomy } from '@/context/PakistanEconomyContext';
-import { getCurrentMonthYear, getMonthName, getPreviousMonths } from '@/lib/date-utils';
-import { 
-  formatCurrency, 
-  calculateMonthlyChangePercentage, 
-  calculateExpenseTrend, 
-  findTopCategories,
-  calculateDailyAverage 
-} from '@/lib/expense-utils';
+import { useBusinessEconomy } from '@/context/BusinessEconomyContext';
+import { getCurrentMonthYear, getMonthName } from '@/lib/date-utils';
+import { formatCurrency } from '@/lib/expense-utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
 import StatCard from '@/components/StatCard';
-import ExpenseChart from '@/components/ExpenseChart';
-import TrendChart from '@/components/TrendChart';
-import EconomyMetrics from '@/components/EconomyMetrics';
-import ExpenseForm from '@/components/ExpenseForm';
 import {
   Dialog,
   DialogContent,
@@ -27,376 +19,415 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
+import TransactionForm from '@/components/TransactionForm';
 import { 
   Plus, 
-  Wallet, 
   TrendingUp, 
   TrendingDown, 
-  AlertTriangle,
+  DollarSign,
   Target,
   Calendar,
   PieChart,
-  BarChart,
-  Info
+  AlertTriangle,
+  BarChart3,
+  Zap,
+  Building2,
+  Users,
+  Brain
 } from 'lucide-react';
 
 const Dashboard: React.FC = () => {
-  const { expenses, addExpense, getMonthlyExpenses, getMonthlyTotal, loading } = useExpenses();
+  const { 
+    transactions, 
+    addTransaction, 
+    getMonthlyIncome,
+    getMonthlyExpenses,
+    getMonthlyProfit,
+    getCashFlow,
+    getTopClients,
+    loading 
+  } = useFinancials();
+  
   const { user } = useAuth();
-  const { currentInflationRate, getSavingsRecommendations } = usePakistanEconomy();
+  const { getBusinessRecommendations, getFinancialHealth, getMarketBenchmarks } = useBusinessEconomy();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   
   const { month, year } = getCurrentMonthYear();
   const prevMonth = month === 0 ? 11 : month - 1;
   const prevYear = month === 0 ? year - 1 : year;
   
-  // Calculate comprehensive metrics
+  // Calculate comprehensive financial metrics
   const metrics = useMemo(() => {
-    const currentMonthExpenses = getMonthlyExpenses(month, year);
-    const currentMonthTotal = getMonthlyTotal(month, year);
-    const previousMonthTotal = getMonthlyTotal(prevMonth, prevYear);
-    const changePercentage = calculateMonthlyChangePercentage(currentMonthTotal, previousMonthTotal);
+    const currentIncome = getMonthlyIncome(month, year);
+    const currentExpenses = getMonthlyExpenses(month, year);
+    const currentProfit = getMonthlyProfit(month, year);
     
-    // Calculate running totals for last 6 months
-    const last6Months = getPreviousMonths(6);
-    const monthlyTotals = last6Months.map(({ month: m, year: y }) => ({
-      month: getMonthName(m),
-      total: getMonthlyTotal(m, y),
-      expenses: getMonthlyExpenses(m, y).length
-    }));
+    const prevIncome = getMonthlyIncome(prevMonth, prevYear);
+    const prevExpenses = getMonthlyExpenses(prevMonth, prevYear);
+    const prevProfit = getMonthlyProfit(prevMonth, prevYear);
     
-    const avgMonthlySpending = monthlyTotals.reduce((sum, m) => sum + m.total, 0) / 6;
-    const totalExpenses = expenses.length;
-    const dailyAverage = calculateDailyAverage(currentMonthExpenses);
+    const profitMargin = currentIncome > 0 ? (currentProfit / currentIncome) * 100 : 0;
+    const expenseRatio = currentIncome > 0 ? (currentExpenses / currentIncome) * 100 : 0;
     
-    // Days since first expense
-    const daysSinceFirst = expenses.length > 0 ? 
-      Math.ceil((Date.now() - Math.min(...expenses.map(e => new Date(e.date).getTime()))) / (1000 * 60 * 60 * 24)) : 0;
+    // Growth calculations
+    const incomeGrowth = prevIncome > 0 ? ((currentIncome - prevIncome) / prevIncome) * 100 : 0;
+    const expenseGrowth = prevExpenses > 0 ? ((currentExpenses - prevExpenses) / prevExpenses) * 100 : 0;
+    const profitGrowth = prevProfit !== 0 ? ((currentProfit - prevProfit) / Math.abs(prevProfit)) * 100 : 0;
     
-    // Calculate spending velocity (expenses per week)
-    const spendingVelocity = totalExpenses > 0 && daysSinceFirst > 0 ? 
-      (totalExpenses / daysSinceFirst) * 7 : 0;
+    // Cash flow analysis
+    const cashFlowData = getCashFlow();
+    const avgMonthlyProfit = cashFlowData.reduce((sum, d) => sum + d.profit, 0) / cashFlowData.length;
     
     return {
-      currentMonthTotal,
-      previousMonthTotal,
-      changePercentage,
-      avgMonthlySpending,
-      dailyAverage,
-      totalExpenses,
-      monthlyTotals,
-      daysSinceFirst,
-      spendingVelocity,
-      currentMonthExpenses: currentMonthExpenses.length
+      currentIncome,
+      currentExpenses,
+      currentProfit,
+      profitMargin,
+      expenseRatio,
+      incomeGrowth,
+      expenseGrowth,
+      profitGrowth,
+      avgMonthlyProfit,
+      cashFlowData,
+      totalTransactions: transactions.length
     };
-  }, [expenses, month, year, prevMonth, prevYear, getMonthlyExpenses, getMonthlyTotal]);
+  }, [transactions, month, year, prevMonth, prevYear, getMonthlyIncome, getMonthlyExpenses, getMonthlyProfit, getCashFlow]);
   
-  // Get expense trend for the last 6 months
-  const trendData = calculateExpenseTrend(expenses, 6);
+  // Financial health assessment
+  const financialHealth = getFinancialHealth(
+    metrics.currentIncome, 
+    metrics.currentExpenses, 
+    metrics.incomeGrowth
+  );
   
-  // Get top spending categories for current month
-  const categoryData = findTopCategories(getMonthlyExpenses(month, year)).map(cat => ({
-    name: cat.category,
-    value: cat.amount,
-    percentage: cat.percentage
-  }));
+  // Business recommendations
+  const recommendations = getBusinessRecommendations(
+    metrics.currentIncome,
+    metrics.currentExpenses,
+    metrics.profitMargin
+  );
   
-  // Budget insights
-  const budgetInsights = useMemo(() => {
-    const assumedIncome = 75000; // Default assumption
-    const recommendations = getSavingsRecommendations(assumedIncome, metrics.currentMonthTotal);
-    const savingsRate = ((assumedIncome - metrics.currentMonthTotal) / assumedIncome) * 100;
-    const inflationAdjustedSpending = metrics.currentMonthTotal * (1 + currentInflationRate / 100);
-    
-    return {
-      assumedIncome,
-      savingsRate: Math.max(0, savingsRate),
-      recommendations: recommendations.slice(0, 3), // Top 3 recommendations
-      inflationAdjustedSpending,
-      budgetHealth: savingsRate > 20 ? 'excellent' : savingsRate > 10 ? 'good' : savingsRate > 0 ? 'fair' : 'poor'
-    };
-  }, [metrics.currentMonthTotal, currentInflationRate, getSavingsRecommendations]);
+  // Market benchmarks
+  const benchmarks = getMarketBenchmarks();
   
-  const handleAddExpense = async (values: Omit<any, 'id'>) => {
+  // Top clients for current month
+  const topClients = getTopClients(month, year);
+
+  const handleAddTransaction = async (values: any) => {
     try {
-      await addExpense(values);
+      await addTransaction(values);
       setIsAddDialogOpen(false);
     } catch (error) {
-      console.error('Failed to add expense:', error);
+      console.error('Failed to add transaction:', error);
     }
   };
 
-  const getBudgetHealthColor = (health: string) => {
-    switch (health) {
-      case 'excellent': return 'text-green-600 bg-green-50 border-green-200';
-      case 'good': return 'text-blue-600 bg-blue-50 border-blue-200';
-      case 'fair': return 'text-yellow-600 bg-yellow-50 border-yellow-200';
-      case 'poor': return 'text-red-600 bg-red-50 border-red-200';
-      default: return 'text-gray-600 bg-gray-50 border-gray-200';
+  const getHealthStatusColor = (status: string) => {
+    switch (status) {
+      case 'excellent': return 'financial-health-excellent';
+      case 'good': return 'financial-health-good';
+      case 'fair': return 'financial-health-fair';
+      case 'poor': return 'financial-health-poor';
+      case 'critical': return 'financial-health-critical';
+      default: return 'profit-neutral';
     }
+  };
+
+  const getProfitTrendIcon = (profit: number) => {
+    if (profit > 0) return <TrendingUp className="w-4 h-4 text-green-600" />;
+    if (profit < 0) return <TrendingDown className="w-4 h-4 text-red-600" />;
+    return <Target className="w-4 h-4 text-gray-600" />;
   };
 
   if (loading) {
     return (
       <div className="space-y-8">
         <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pakistan-green"></div>
+          <div className="loading-shimmer h-12 w-12 rounded-full"></div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-8">
-      {/* Header with user greeting */}
-      <div className="flex flex-col justify-between space-y-4 md:flex-row md:items-center md:space-y-0">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">
-            Welcome back, {user?.username}! 👋
-          </h1>
-          <p className="text-muted-foreground">
-            Here's your financial overview for {getMonthName(month)} {year}
-          </p>
+    <div className="space-y-8 fade-in">
+      {/* Header */}
+      <div className="dashboard-header">
+        <div className="flex flex-col justify-between space-y-4 md:flex-row md:items-center md:space-y-0">
+          <div>
+            <h1 className="text-3xl font-bold">
+              Welcome to Elegnoia FinanceAI 🚀
+            </h1>
+            <p className="text-blue-100 mt-2">
+              Smart financial management for {getMonthName(month)} {year}
+            </p>
+            <div className="flex items-center gap-4 mt-4">
+              <Badge variant="secondary" className="bg-blue-500 text-white">
+                Financial Health: {financialHealth.status.toUpperCase()}
+              </Badge>
+              <Badge variant="outline" className="border-blue-300 text-blue-100">
+                {metrics.totalTransactions} transactions tracked
+              </Badge>
+            </div>
+          </div>
+          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+            <DialogTrigger asChild>
+              <Button className="business-button">
+                <Plus className="w-4 h-4" /> Add Transaction
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Add New Transaction</DialogTitle>
+                <DialogDescription>
+                  Record income or expense transaction with AI-powered categorization
+                </DialogDescription>
+              </DialogHeader>
+              <TransactionForm onSubmit={handleAddTransaction} />
+            </DialogContent>
+          </Dialog>
         </div>
-        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-pakistan-green hover:bg-pakistan-lightGreen">
-              <Plus className="w-4 h-4 mr-2" /> Add Expense
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Add New Expense</DialogTitle>
-              <DialogDescription>
-                Enter the details of your new expense. You can also use voice recognition!
-              </DialogDescription>
-            </DialogHeader>
-            <ExpenseForm onSubmit={handleAddExpense} />
-          </DialogContent>
-        </Dialog>
       </div>
 
-      {/* Budget Health Alert */}
-      {budgetInsights.budgetHealth === 'poor' && (
+      {/* Financial Health Alert */}
+      {financialHealth.status === 'critical' || financialHealth.status === 'poor' && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription>
-            <strong>Budget Alert:</strong> Your expenses exceed your estimated income this month. 
-            Consider reviewing your spending patterns and implementing cost-saving measures.
+            <strong>Financial Alert:</strong> {financialHealth.description}
+            {metrics.currentProfit < 0 && " Immediate action required to improve cash flow."}
           </AlertDescription>
         </Alert>
       )}
 
-      {/* Key Metrics Grid */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      {/* Key Performance Indicators */}
+      <div className="kpi-grid">
         <StatCard
-          title="This Month's Expenses"
-          value={formatCurrency(metrics.currentMonthTotal)}
-          icon={<Wallet className="w-4 h-4" />}
-          trend={metrics.changePercentage > 0 ? 'up' : metrics.changePercentage < 0 ? 'down' : 'neutral'}
-          trendValue={`${Math.abs(metrics.changePercentage).toFixed(1)}%`}
-          description={`${metrics.currentMonthExpenses} transactions this month`}
+          title="Monthly Revenue"
+          value={formatCurrency(metrics.currentIncome)}
+          icon={<DollarSign className="w-4 h-4" />}
+          trend={metrics.incomeGrowth > 0 ? 'up' : metrics.incomeGrowth < 0 ? 'down' : 'neutral'}
+          trendValue={`${Math.abs(metrics.incomeGrowth).toFixed(1)}%`}
+          description="Total income this month"
+          className="metric-card"
         />
         
         <StatCard
-          title="Daily Average"
-          value={formatCurrency(metrics.dailyAverage)}
-          icon={<Calendar className="w-4 h-4" />}
-          description="Average spending per day this month"
+          title="Monthly Expenses"
+          value={formatCurrency(metrics.currentExpenses)}
+          icon={<BarChart3 className="w-4 h-4" />}
+          trend={metrics.expenseGrowth > 0 ? 'down' : 'up'} // Higher expenses = bad trend
+          trendValue={`${Math.abs(metrics.expenseGrowth).toFixed(1)}%`}
+          description={`${metrics.expenseRatio.toFixed(1)}% of revenue`}
+          className="metric-card"
         />
         
         <StatCard
-          title="6-Month Average"
-          value={formatCurrency(metrics.avgMonthlySpending)}
-          icon={<BarChart className="w-4 h-4" />}
-          description="Your average monthly spending"
+          title="Net Profit"
+          value={formatCurrency(metrics.currentProfit)}
+          icon={getProfitTrendIcon(metrics.currentProfit)}
+          trend={metrics.currentProfit > 0 ? 'up' : 'down'}
+          trendValue={`${metrics.profitMargin.toFixed(1)}% margin`}
+          description="Profit this month"
+          className={`metric-card ${metrics.currentProfit >= 0 ? 'profit-positive' : 'profit-negative'}`}
         />
         
         <StatCard
-          title="Savings Rate"
-          value={`${budgetInsights.savingsRate.toFixed(1)}%`}
+          title="Financial Score"
+          value={`${financialHealth.score}/100`}
           icon={<Target className="w-4 h-4" />}
-          trend={budgetInsights.savingsRate > 20 ? 'up' : budgetInsights.savingsRate > 0 ? 'neutral' : 'down'}
-          description={`Budget health: ${budgetInsights.budgetHealth}`}
+          description={financialHealth.status}
+          className={`metric-card ${getHealthStatusColor(financialHealth.status)}`}
         />
       </div>
 
-      {/* Budget Overview Card */}
-      <Card className={`border-2 ${getBudgetHealthColor(budgetInsights.budgetHealth)}`}>
+      {/* Financial Health Overview */}
+      <Card className={`border-2 ${getHealthStatusColor(financialHealth.status)}`}>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Target className="w-5 h-5" />
-            Budget Overview
-            <Badge variant="outline" className={getBudgetHealthColor(budgetInsights.budgetHealth)}>
-              {budgetInsights.budgetHealth.toUpperCase()}
+            <Building2 className="w-5 h-5" />
+            Business Performance Overview
+            <Badge variant="outline" className={getHealthStatusColor(financialHealth.status)}>
+              {financialHealth.status.toUpperCase()}
             </Badge>
           </CardTitle>
           <CardDescription>
-            Based on estimated monthly income of {formatCurrency(budgetInsights.assumedIncome)}
+            {financialHealth.description}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            <div className="flex justify-between items-center">
-              <span className="text-sm font-medium">Monthly Budget Usage</span>
-              <span className="text-sm text-muted-foreground">
-                {((metrics.currentMonthTotal / budgetInsights.assumedIncome) * 100).toFixed(1)}%
-              </span>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="text-center p-4 bg-gray-50 rounded-lg">
+                <div className="text-2xl font-bold text-blue-600">{metrics.profitMargin.toFixed(1)}%</div>
+                <div className="text-sm text-gray-600">Profit Margin</div>
+                <div className="text-xs text-gray-500 mt-1">
+                  Target: {benchmarks.profitMargin.target}%
+                </div>
+              </div>
+              <div className="text-center p-4 bg-gray-50 rounded-lg">
+                <div className="text-2xl font-bold text-green-600">{metrics.incomeGrowth.toFixed(1)}%</div>
+                <div className="text-sm text-gray-600">Revenue Growth</div>
+                <div className="text-xs text-gray-500 mt-1">
+                  Target: {benchmarks.growthRate.target}%
+                </div>
+              </div>
+              <div className="text-center p-4 bg-gray-50 rounded-lg">
+                <div className="text-2xl font-bold text-purple-600">{formatCurrency(metrics.avgMonthlyProfit)}</div>
+                <div className="text-sm text-gray-600">Avg Monthly Profit</div>
+                <div className="text-xs text-gray-500 mt-1">
+                  6-month average
+                </div>
+              </div>
             </div>
-            <Progress 
-              value={(metrics.currentMonthTotal / budgetInsights.assumedIncome) * 100} 
-              className="h-2"
-            />
-            <div className="grid grid-cols-3 gap-4 text-center">
-              <div>
-                <div className="text-lg font-bold">{formatCurrency(metrics.currentMonthTotal)}</div>
-                <div className="text-xs text-muted-foreground">Spent</div>
+            
+            {/* Profit Margin Progress */}
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span>Profit Margin Progress</span>
+                <span>{metrics.profitMargin.toFixed(1)}% / {benchmarks.profitMargin.excellent}%</span>
               </div>
-              <div>
-                <div className="text-lg font-bold">
-                  {formatCurrency(Math.max(0, budgetInsights.assumedIncome - metrics.currentMonthTotal))}
-                </div>
-                <div className="text-xs text-muted-foreground">Remaining</div>
-              </div>
-              <div>
-                <div className="text-lg font-bold">
-                  {formatCurrency(budgetInsights.inflationAdjustedSpending - metrics.currentMonthTotal)}
-                </div>
-                <div className="text-xs text-muted-foreground">Inflation Impact</div>
-              </div>
+              <Progress 
+                value={(metrics.profitMargin / benchmarks.profitMargin.excellent) * 100} 
+                className="h-2"
+              />
             </div>
           </div>
         </CardContent>
       </Card>
-      
-      {/* Charts Grid */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <ExpenseChart data={categoryData} />
-        <TrendChart data={trendData} />
-      </div>
 
-      {/* Insights and Actions Grid */}
-      <div className="grid gap-4 md:grid-cols-2">
-        {/* Quick Insights */}
-        <Card>
+      {/* Quick Insights and Top Clients */}
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* AI Insights Preview */}
+        <Card className="chart-container">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Info className="w-5 h-5" />
-              Quick Insights
+              <Brain className="w-5 h-5 text-blue-600" />
+              AI Financial Insights
             </CardTitle>
-            <CardDescription>Key observations about your spending</CardDescription>
+            <CardDescription>Key observations about your business performance</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid gap-3">
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <div>
-                  <p className="font-medium text-sm">Spending Velocity</p>
-                  <p className="text-xs text-muted-foreground">
-                    {metrics.spendingVelocity.toFixed(1)} expenses per week
-                  </p>
+            {recommendations.slice(0, 3).map((rec, index) => (
+              <div key={index} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+                <div className={`w-2 h-2 rounded-full mt-2 ${
+                  rec.priority === 'high' ? 'bg-red-500' :
+                  rec.priority === 'medium' ? 'bg-yellow-500' : 'bg-green-500'
+                }`} />
+                <div className="flex-1">
+                  <h4 className="font-medium text-sm">{rec.title}</h4>
+                  <p className="text-xs text-gray-600 mt-1">{rec.description}</p>
+                  <Badge variant="outline" className="mt-2 text-xs">
+                    {rec.expectedImpact}
+                  </Badge>
                 </div>
-                <TrendingUp className="w-4 h-4 text-pakistan-green" />
               </div>
-              
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <div>
-                  <p className="font-medium text-sm">Tracking Period</p>
-                  <p className="text-xs text-muted-foreground">
-                    {metrics.daysSinceFirst} days, {metrics.totalExpenses} total expenses
-                  </p>
-                </div>
-                <Calendar className="w-4 h-4 text-pakistan-green" />
-              </div>
-
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <div>
-                  <p className="font-medium text-sm">Change vs Last Month</p>
-                  <p className="text-xs text-muted-foreground">
-                    {formatCurrency(Math.abs(metrics.currentMonthTotal - metrics.previousMonthTotal))} 
-                    {metrics.changePercentage > 0 ? ' increase' : ' decrease'}
-                  </p>
-                </div>
-                {metrics.changePercentage > 0 ? 
-                  <TrendingUp className="w-4 h-4 text-red-500" /> :
-                  <TrendingDown className="w-4 h-4 text-green-500" />
-                }
-              </div>
-            </div>
+            ))}
+            <Button 
+              variant="outline" 
+              className="w-full mt-4"
+              onClick={() => window.location.href = '/insights'}
+            >
+              <Zap className="w-4 h-4 mr-2" />
+              Get Full AI Analysis
+            </Button>
           </CardContent>
         </Card>
 
-        {/* Quick Actions & Economy */}
-        <Card>
+        {/* Top Clients & Quick Actions */}
+        <Card className="chart-container">
           <CardHeader>
-            <CardTitle>Quick Actions</CardTitle>
-            <CardDescription>Common tasks and economic updates</CardDescription>
+            <CardTitle className="flex items-center gap-2">
+              <Users className="w-5 h-5 text-blue-600" />
+              Top Clients & Quick Actions
+            </CardTitle>
+            <CardDescription>Revenue leaders and common tasks</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid gap-2">
-              <Button 
-                variant="outline" 
-                className="justify-start border-dashed"
-                onClick={() => setIsAddDialogOpen(true)}
-              >
-                <Plus className="w-4 h-4 mr-2" /> Add today's expense
-              </Button>
-              
-              <Button 
-                variant="outline" 
-                className="justify-start border-dashed"
-                onClick={() => window.location.href = '/expenses'}
-              >
-                <Wallet className="w-4 h-4 mr-2" /> View all expenses
-              </Button>
-              
-              <Button 
-                variant="outline" 
-                className="justify-start border-dashed"
-                onClick={() => window.location.href = '/analytics'}
-              >
-                <PieChart className="w-4 h-4 mr-2" /> Detailed analytics
-              </Button>
-            </div>
+            {topClients.length > 0 ? (
+              <div className="space-y-2">
+                <h4 className="font-medium text-sm">Top Revenue Sources</h4>
+                {topClients.slice(0, 3).map((client, index) => (
+                  <div key={index} className="flex justify-between items-center p-2 bg-blue-50 rounded">
+                    <span className="text-sm font-medium">{client.client}</span>
+                    <span className="text-sm text-blue-600">{formatCurrency(client.revenue)}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center p-4 text-gray-500">
+                <Users className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">No client data yet</p>
+              </div>
+            )}
             
-            <div className="pt-4 border-t">
-              <EconomyMetrics />
+            <div className="border-t pt-4 space-y-2">
+              <h4 className="font-medium text-sm">Quick Actions</h4>
+              <div className="grid gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  className="justify-start"
+                  onClick={() => setIsAddDialogOpen(true)}
+                >
+                  <Plus className="w-4 h-4 mr-2" /> Record Income
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  className="justify-start"
+                  onClick={() => window.location.href = '/analytics'}
+                >
+                  <PieChart className="w-4 h-4 mr-2" /> View Analytics
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  className="justify-start"
+                  onClick={() => window.location.href = '/transactions'}
+                >
+                  <Calendar className="w-4 h-4 mr-2" /> All Transactions
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Top Recommendations */}
-      {budgetInsights.recommendations.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Personalized Recommendations</CardTitle>
-            <CardDescription>
-              AI-powered suggestions based on your spending and Pakistan's economy
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-3 md:grid-cols-3">
-              {budgetInsights.recommendations.map((rec, index) => (
-                <div key={index} className="p-4 border rounded-lg">
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="font-semibold text-sm">{rec.title}</h4>
-                    <Badge variant="outline" className={
-                      rec.priority === 'high' ? 'border-red-500 text-red-500' :
-                      rec.priority === 'medium' ? 'border-yellow-500 text-yellow-500' :
-                      'border-green-500 text-green-500'
-                    }>
-                      {rec.priority}
-                    </Badge>
+      {/* Cash Flow Trend */}
+      <Card className="chart-container">
+        <CardHeader>
+          <CardTitle>6-Month Cash Flow Trend</CardTitle>
+          <CardDescription>
+            Track your business's financial performance over time
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <div className="grid grid-cols-6 gap-2">
+              {metrics.cashFlowData.map((data, index) => (
+                <div key={index} className="text-center">
+                  <div className="text-xs text-gray-500 mb-1">{data.month}</div>
+                  <div className={`h-20 rounded flex flex-col justify-end p-1 text-xs ${
+                    data.profit >= 0 ? 'bg-green-100' : 'bg-red-100'
+                  }`}>
+                    <div className="font-medium">
+                      {formatCurrency(data.profit).replace('PKR ', '₹')}
+                    </div>
                   </div>
-                  <p className="text-xs text-gray-600">{rec.description}</p>
+                  <div className="text-xs text-gray-400 mt-1">
+                    {((data.income > 0 ? data.profit / data.income : 0) * 100).toFixed(0)}%
+                  </div>
                 </div>
               ))}
             </div>
-          </CardContent>
-        </Card>
-      )}
+            <div className="flex justify-between text-xs text-gray-500">
+              <span>Monthly Profit Trend</span>
+              <span>Profit Margin %</span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 };
