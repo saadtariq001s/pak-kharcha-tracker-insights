@@ -112,7 +112,7 @@ const ExpenseList: React.FC<ExpenseListProps> = ({
     dateFrom: '',
     dateTo: ''
   });
-  const [showFilters, setShowFiltersPanel] = useState(false);
+  const [showFiltersPanel, setShowFiltersPanel] = useState(false);
   
   const categories: ExpenseCategory[] = [
     'Food & Groceries', 'Transportation', 'Utilities', 'Housing', 'Healthcare',
@@ -347,7 +347,7 @@ const ExpenseList: React.FC<ExpenseListProps> = ({
             <Button 
               variant="outline" 
               size="sm"
-              onClick={() => setShowFiltersPanel(!showFilters)}
+              onClick={() => setShowFiltersPanel(!showFiltersPanel)}
               className={hasActiveFilters ? 'border-pakistan-green' : ''}
             >
               <Filter className="w-4 h-4 mr-2" />
